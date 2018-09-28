@@ -1,0 +1,119 @@
+from django.conf import settings
+from Crypto.PublicKey import RSA 
+from Crypto.Signature import PKCS1_v1_5 
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Hash import SHA256 
+from Crypto.Cipher import AES
+from Crypto.Random.random import StrongRandom
+
+from base64 import b64encode
+import string
+import json
+
+def get_sha256(file):
+	"""Feed data into sha256"""
+	digest = SHA256.new() 
+	for chunk in file.chunks():
+		digest.update(chunk)
+	return digest
+
+
+def sign_hash(h):
+	"""Sign the hash using PKCS#1 v1.5 with RSA private key.
+	The signature is then encoded by base64"""
+	try:
+		key = open(settings.PRIVATE_KEY, "r").read()
+		rsakey = RSA.importKey(key)
+		signer = PKCS1_v1_5.new(rsakey)
+		sign = b64encode(signer.sign(h)).decode('ascii')
+	except:
+		return ''
+
+	return sign
+
+
+def get_random_string(str_len):
+	"""Get a random string of length len"""
+	seq = string.ascii_letters + string.punctuation + string.digits
+	sRandom = StrongRandom()
+	key = "".join(sRandom.choice(seq) for x in range(str_len))
+	return key
+
+
+def AES_cipher(data, key, IV, decrypt=False):
+	"""Encrypt or decrypt msg with AES using OFB mode with key and IV"""
+	if not data or len(key) != 32 or len(IV) != AES.block_size:
+		return ''
+
+	cipher = AES.new(key, AES.MODE_OFB, IV)
+	if decrypt:
+		return cipher.decrypt(data)
+	return cipher.encrypt(data)
+
+
+def PKCS1_OAEP_encrypt(msg):
+	"""Encrypt msg with private key using PKCS1_OAEP scheme"""
+	try:
+		msg = msg.encode('ascii')
+		key = open(settings.PUBLIC_KEY, "r").read()
+		pubkey = RSA.importKey(key)
+		cipher = PKCS1_OAEP.new(pubkey)
+		cipher_text = cipher.encrypt(msg)
+		return cipher_text
+	except Exception as e:
+		return ''
+
+
+def PKCS1_OAEP_decrypt(cipher_text):
+	"""Decrypt cipher_text with private key using PKCS1_OAEP scheme"""
+	if len(cipher_text) != 512:
+		return ''
+	try:
+		key = RSA.importKey(open(PRIVATE_KEY).read())
+		cipher = PKCS1_OAEP.new(key)
+		message = cipher.decrypt(cipher_text)
+		return message
+	except:
+		return ''
+
+
+def decode_uploaded_data(en_data, bypass=False):
+	"""Decode uploaded data, return a dictionary if success, otherwise
+	return False"""
+	data = en_data
+	if not bypass:
+		if not en_data:
+			return False
+
+		raw_data = PKCS1_OAEP_decrypt(en_data[:512])
+
+		if len(raw_data) != 48:
+			return False
+
+		key = raw_data[:32]
+		IV = raw_data[-16:]
+		data = AES_cipher(raw_data[512:], key, IV, True)
+
+		if not data:
+			return False
+
+	try:
+		data = json.loads(data)
+	except:
+		return False
+
+	return data
+
+
+if __name__ == '__main__':
+	# test module
+	key = get_random_string(32)
+	IV = get_random_string(16)
+	aes_en = AES_cipher("aaaaaaaaaaaaaaag", key, IV)
+	print (key)
+	print (IV)
+	crypted = PKCS1_OAEP_encrypt(key+IV)
+	print ('len of cipher_text: %d' % len(crypted))
+	text = PKCS1_OAEP_decrypt(crypted)
+	print (text)
+	print (AES_cipher(aes_en, text[:32], text[-16:]), True)
