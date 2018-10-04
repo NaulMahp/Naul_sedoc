@@ -1,0 +1,22 @@
+//  Convert char array to byte array
+//
+int convertZeroPadedHexIntoByte(char *dataset,unsigned char *bytearray){
+	int i = strlen(dataset),j=0,counter=0;
+	char c[2];
+	unsigned int bytes[2];
+
+	for(j=0;j<i;j++){
+		if(0 == j%2){
+
+			c[0] = dataset[j];
+			c[1] = dataset[j+1];
+
+			sscanf(c, "%02x", &bytes[0]);
+
+			bytearray[counter] = bytes[0];
+
+			counter++;
+		}
+	}
+
+}
